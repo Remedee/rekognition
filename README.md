@@ -1,0 +1,1 @@
+A project made to mess around with the AWS Rekognition API.
