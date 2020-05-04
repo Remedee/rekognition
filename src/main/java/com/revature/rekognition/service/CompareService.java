@@ -19,6 +19,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import javax.imageio.ImageIO;
@@ -28,6 +29,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class CompareService {
+  private static final String[] supportedImageTypes = {"JPEG", "PNG", "BMP", "WBMP"};
   private static final Logger LOG = LoggerFactory.getLogger(CompareService.class);
   private static final String BUCKET_NAME = "revature-compare-bucket";
   private final AmazonRekognition rekognitionClient =
@@ -54,6 +56,7 @@ public class CompareService {
       compareRequest.setQualityFilter(compareSeveralRequest.getQualityFilter());
       compareRequest.setTargetImage(compareSeveralRequest.getImages().get(i));
       compareRequest.setLocal(compareSeveralRequest.isLocal());
+      compareRequest.setUrl(compareSeveralRequest.isUrl());
       compareRequest.setSourceImage(sourceImage);
 
       compareResult = compareFaces(compareRequest);
@@ -91,6 +94,11 @@ public class CompareService {
           new Image().withBytes(imageToByteBuffer(compareRequest.getSourceImage())));
       compareFacesRequest.setTargetImage(
           new Image().withBytes(imageToByteBuffer(compareRequest.getTargetImage())));
+    } else if (compareRequest.isUrl()) {
+      compareFacesRequest
+          .setSourceImage(new Image().withBytes(urlToByteBuffer(compareRequest.getSourceImage())));
+      compareFacesRequest
+          .setTargetImage(new Image().withBytes(urlToByteBuffer(compareRequest.getTargetImage())));
     } else {
       compareFacesRequest.setSourceImage(new Image().withS3Object(
           new S3Object().withBucket(BUCKET_NAME).withName(compareRequest.getSourceImage())));
@@ -126,7 +134,7 @@ public class CompareService {
   }
 
   /**
-   * Converts the given path to an image into a ByteBuffer of that image.
+   * Converts the given image path into a ByteBuffer of that image.
    * 
    * @param image The path of image to convert.
    * @return A ByteBuffer of the image.
@@ -143,7 +151,7 @@ public class CompareService {
         String exception = "The given image path is null. Cannot convert to a ByteBuffer.";
 
         LOG.info(exception);
-        throw new ByteBufferException(exception);
+        throw new ByteBufferException(exception, new NullPointerException());
       }
 
     } catch (IOException e) {
@@ -151,7 +159,55 @@ public class CompareService {
           .append("' into a ByteBuffer.").toString();
 
       LOG.info(exception);
-      throw new ByteBufferException(exception);
+      throw new ByteBufferException(exception, e);
+    }
+  }
+
+  /**
+   * Converts the image at the given url into a ByteBuffer of that image.
+   * 
+   * @param urlString The url to an image to convert;
+   * @return A ByteBuffer of the image.
+   */
+  private ByteBuffer urlToByteBuffer(String urlString) {
+    try {
+      if (urlString != null) {
+        URL url = new URL(urlString);
+        BufferedImage bufferedImage = ImageIO.read(url);
+        ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+
+        boolean converted = false;
+        for (String imageType : supportedImageTypes) {
+          if (ImageIO.write(bufferedImage, imageType, byteStream)) {
+            converted = true;
+            break;
+          }
+        }
+        if (!converted) {
+          String exception = new StringBuilder("Failed to transform the image at url '")
+              .append(urlString).append("' into a ByteBuffer. Unsupported Image Type.").toString();
+
+          LOG.info(exception);
+          throw new ByteBufferException(exception);
+        }
+
+        return ByteBuffer.wrap(byteStream.toByteArray());
+
+      } else {
+        String exception = "The given image url is null. Cannot convert to a ByteBuffer.";
+
+        LOG.info(exception);
+        throw new ByteBufferException(exception, new NullPointerException());
+      }
+
+    } catch (
+
+    IOException e) {
+      String exception = new StringBuilder("Failed to transform the image at url '")
+          .append(urlString).append("' into a ByteBuffer.").toString();
+
+      LOG.info(exception);
+      throw new ByteBufferException(exception, e);
     }
   }
 }

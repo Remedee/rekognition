@@ -11,4 +11,8 @@ public class ByteBufferException extends RuntimeException {
     super(message);
   }
 
+  public ByteBufferException(String message, Throwable cause) {
+    super(message, cause);
+  }
+
 }
