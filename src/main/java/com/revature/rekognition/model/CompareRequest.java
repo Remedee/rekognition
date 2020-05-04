@@ -30,4 +30,7 @@ public class CompareRequest implements Serializable {
 
   @JsonProperty("Local")
   private boolean local = false;
+
+  @JsonProperty("Url")
+  private boolean url = false;
 }

@@ -8,8 +8,7 @@ import com.amazonaws.services.rekognition.model.CompareFacesResult;
 import com.amazonaws.services.rekognition.model.ComparedFace;
 import com.amazonaws.services.rekognition.model.Image;
 import com.amazonaws.services.rekognition.model.S3Object;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.revature.rekognition.exception.ByteBufferException;
 import com.revature.rekognition.model.CompareRequest;
 import com.revature.rekognition.model.CompareResult;
 import com.revature.rekognition.model.CompareSeveralRequest;
@@ -29,10 +28,10 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class CompareService {
-  private static final AmazonRekognition rekognitionClient =
-      AmazonRekognitionClientBuilder.defaultClient();
   private static final Logger LOG = LoggerFactory.getLogger(CompareService.class);
   private static final String BUCKET_NAME = "revature-compare-bucket";
+  private final AmazonRekognition rekognitionClient =
+      AmazonRekognitionClientBuilder.defaultClient();
 
   /**
    * Use compareFaces() to compare a list of images against the first image in that list.
@@ -42,30 +41,20 @@ public class CompareService {
    */
   public CompareSeveralResult compareSeveralFaces(CompareSeveralRequest compareSeveralRequest) {
 
-    CompareSeveralRequest requestParameters;
-
-    try {
-      ObjectMapper objectMapper = new ObjectMapper();
-      requestParameters = objectMapper.readValue(
-          objectMapper.writeValueAsString(compareSeveralRequest), CompareSeveralRequest.class);
-    } catch (JsonProcessingException e) {
-      requestParameters = compareSeveralRequest;
-    }
-
-    CompareSeveralResult compareSeveralResult = new CompareSeveralResult(requestParameters,
+    CompareSeveralResult compareSeveralResult = new CompareSeveralResult(compareSeveralRequest,
         new LinkedList<MatchedFace>(), new LinkedList<UnmatchedFace>());
     String sourceImage = compareSeveralRequest.getImages().get(0);
-    compareSeveralRequest.getImages().remove(0);
+    int size = compareSeveralRequest.getImages().size();
 
-    for (String image : compareSeveralRequest.getImages()) {
+    for (int i = 1; i < size; i++) {
       CompareRequest compareRequest = new CompareRequest();
       CompareResult compareResult;
 
       compareRequest.setSimilarityThreshold(compareSeveralRequest.getSimilarityThreshold());
       compareRequest.setQualityFilter(compareSeveralRequest.getQualityFilter());
+      compareRequest.setTargetImage(compareSeveralRequest.getImages().get(i));
       compareRequest.setLocal(compareSeveralRequest.isLocal());
       compareRequest.setSourceImage(sourceImage);
-      compareRequest.setTargetImage(image);
 
       compareResult = compareFaces(compareRequest);
 
@@ -75,12 +64,12 @@ public class CompareService {
       if (compareResult.getUnmatchedFace().getConfidence() == null) {
         matchedFace.setSourceImage(compareResult.getRequestParameters().getSourceImage());
         matchedFace.setTargetImage(compareResult.getRequestParameters().getTargetImage());
-        matchedFace.setMatchedFace(compareResult.getMatchedFace());
+        matchedFace.setFace(compareResult.getMatchedFace());
         compareSeveralResult.getMatchedFaces().add(matchedFace);
       } else {
         unmatchedFace.setSourceImage(compareResult.getRequestParameters().getSourceImage());
         unmatchedFace.setTargetImage(compareResult.getRequestParameters().getTargetImage());
-        unmatchedFace.setUnmatchedFace(compareResult.getUnmatchedFace());
+        unmatchedFace.setFace(compareResult.getUnmatchedFace());
         compareSeveralResult.getUnmatchedFaces().add(unmatchedFace);
       }
     }
@@ -89,8 +78,7 @@ public class CompareService {
   }
 
   /**
-   * Make a call to Amazon Rekognition to compare the two faces given in the
-   * compareRequest.
+   * Make a call to Amazon Rekognition to compare the two faces given in the compareRequest.
    * 
    * @param compareRequest The object containing the images.
    * @return The results of the face comparison.
@@ -99,13 +87,15 @@ public class CompareService {
     CompareFacesRequest compareFacesRequest = new CompareFacesRequest();
 
     if (compareRequest.isLocal()) {
-      compareFacesRequest.setSourceImage(new Image().withBytes(imageToByteBuffer(compareRequest.getSourceImage())));
-      compareFacesRequest.setTargetImage(new Image().withBytes(imageToByteBuffer(compareRequest.getTargetImage())));
-    } else {
       compareFacesRequest.setSourceImage(
-          new Image().withS3Object(new S3Object().withBucket(BUCKET_NAME).withName(compareRequest.getSourceImage())));
+          new Image().withBytes(imageToByteBuffer(compareRequest.getSourceImage())));
       compareFacesRequest.setTargetImage(
-          new Image().withS3Object(new S3Object().withBucket(BUCKET_NAME).withName(compareRequest.getTargetImage())));
+          new Image().withBytes(imageToByteBuffer(compareRequest.getTargetImage())));
+    } else {
+      compareFacesRequest.setSourceImage(new Image().withS3Object(
+          new S3Object().withBucket(BUCKET_NAME).withName(compareRequest.getSourceImage())));
+      compareFacesRequest.setTargetImage(new Image().withS3Object(
+          new S3Object().withBucket(BUCKET_NAME).withName(compareRequest.getTargetImage())));
     }
 
     if (compareRequest.getQualityFilter() != null) {
@@ -117,33 +107,19 @@ public class CompareService {
     }
 
     CompareFacesResult compareFacesResult = rekognitionClient.compareFaces(compareFacesRequest);
+    int numberOfMatchedFaces = compareFacesResult.getFaceMatches().size();
     CompareFacesMatch matchedFace = new CompareFacesMatch();
     ComparedFace unmatchedFace = new ComparedFace();
 
-    if (compareFacesResult.getFaceMatches().size() > 0) {
+    if (numberOfMatchedFaces > 0) {
       matchedFace = compareFacesResult.getFaceMatches().get(0);
-      LOG.info(new StringBuilder("Matched Face: ")
-          .append(compareRequest.getTargetImage())
-          .toString());
-      LOG.info(new StringBuilder("Confidence:   ")
-          .append(matchedFace.getFace()
-          .getConfidence()).append("%")
-          .toString());
-      LOG.info(new StringBuilder("Similarity:   ")
-          .append(matchedFace.getSimilarity().toString())
-          .append("%")
-          .append("\n")
-          .toString());
+      LOG.info("Matched Face: {}", compareRequest.getTargetImage());
+      LOG.info("Confidence:   {}{}", matchedFace.getFace().getConfidence(), "%");
+      LOG.info("Similarity:   {}{}{}", matchedFace.getSimilarity(), "%", "\n");
     } else {
       unmatchedFace = compareFacesResult.getUnmatchedFaces().get(0);
-      LOG.info(new StringBuilder("Unmatched Face: ")
-          .append(compareRequest.getTargetImage())
-          .toString());
-      LOG.info(new StringBuilder("Confidence:     ")
-          .append(unmatchedFace.getConfidence())
-          .append("%")
-          .append("\n")
-          .toString());
+      LOG.info("Unmatched Face: {}", compareRequest.getTargetImage());
+      LOG.info("Confidence:     {}{}{}", unmatchedFace.getConfidence(), "%", "\n");
     }
 
     return new CompareResult(compareRequest, matchedFace, unmatchedFace);
@@ -167,7 +143,7 @@ public class CompareService {
         String exception = "The given image path is null. Cannot convert to a ByteBuffer.";
 
         LOG.info(exception);
-        throw new RuntimeException(exception);
+        throw new ByteBufferException(exception);
       }
 
     } catch (IOException e) {
@@ -175,7 +151,7 @@ public class CompareService {
           .append("' into a ByteBuffer.").toString();
 
       LOG.info(exception);
-      throw new RuntimeException(exception);
+      throw new ByteBufferException(exception);
     }
   }
 }

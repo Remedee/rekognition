@@ -28,4 +28,7 @@ public class CompareSeveralRequest implements Serializable {
 
   @JsonProperty("Local")
   private boolean local = false;
+
+  @JsonProperty("Url")
+  private boolean url = false;
 }

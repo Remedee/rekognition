@@ -23,6 +23,6 @@ public class UnmatchedFace implements Serializable {
   @JsonProperty("TargetImage")
   private String targetImage;
 
-  @JsonProperty("UnmatchedFace")
-  private ComparedFace unmatchedFace;
+  @JsonProperty("Face")
+  private ComparedFace face;
 }

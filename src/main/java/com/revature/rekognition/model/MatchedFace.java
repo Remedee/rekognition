@@ -23,6 +23,6 @@ public class MatchedFace implements Serializable {
   @JsonProperty("TargetImage")
   private String targetImage;
 
-  @JsonProperty("MatchedFace")
-  private CompareFacesMatch matchedFace;
+  @JsonProperty("Face")
+  private CompareFacesMatch face;
 }

@@ -34,14 +34,14 @@ public class CompareController {
   }
 
   /**
-   * Compare the faces of the images given in the compare several request against
-   * the first image.
+   * Compare the faces of the images given in the compare several request against the first image.
    * 
    * @param compareSeveralRequest The object containing the images.
    * @return The results of the compares.
    */
   @PostMapping("/several")
-  public CompareSeveralResult compareSeveralFaces(@RequestBody CompareSeveralRequest compareSeveralRequest) {
+  public CompareSeveralResult compareSeveralFaces(
+      @RequestBody CompareSeveralRequest compareSeveralRequest) {
     LOG.info("Compare Several Request");
     return compareService.compareSeveralFaces(compareSeveralRequest);
   }
